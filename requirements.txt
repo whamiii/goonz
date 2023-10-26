@@ -1,0 +1,3 @@
+tweepy
+web3
+pillow
