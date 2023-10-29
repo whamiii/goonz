@@ -1,6 +1,6 @@
+import tweepy
 import random
 import re
-import tweepy
 import requests
 import json
 import traceback
@@ -8,31 +8,48 @@ import wonky_pfp
 import poke
 import gm
 import bred
+import os
+from os.path import exists
 from goonerator import Goonerator
 
 from messages import generate_message, generate_face_message
 from goon import Goon
-from os.path import exists
-
-import goonauth
 
 class TwitterHandler:
   def __init__(self):
 
-    # authenticate the bot using the API keys and access tokens
+    consumer_key = os.environ["CONSUMER_KEY"]
+    consumer_secret = os.environ["CONSUMER_SECRET"]
+    access_token = os.environ["ACCESS_TOKEN"]
+    access_token_secret = os.environ["ACCESS_TOKEN_SECRET"]
+    bearer_token= os.environ["BEARER_TOKEN"]
+
+    #v1 api for media uploads
     auth = tweepy.OAuth1UserHandler(consumer_key, consumer_secret, access_token, access_token_secret)
     self.api = tweepy.API(auth, wait_on_rate_limit = True)
+
+    #v2 for everything else
+    self.client = tweepy.Client(
+        consumer_key=consumer_key, consumer_secret=consumer_secret,
+        access_token=access_token, access_token_secret=access_token_secret,
+        bearer_token=bearer_token)
+
+    # authenticate the bot using the API keys and access tokens
     self.whami_id = 1458973540099764227
+    self.id = 1608153309151432704
 
     since_cache = open("since_cache", "r")
     self.since_mention = int(since_cache.read())
 
-  def get_api(self):
-    return self.api
-
   #tweet a simple message
   def tweet(self, message):
-    self.api.update_status(message)
+    self.client.create_tweet(text=message)
+
+  # tweet an image
+  def tweet_image(self, message, file_path, reply_id=None):
+    media = self.api.media_upload(filename=file_path)# upload an image from a file
+    media_id = media.media_id_string # get the media id of the uploaded image
+    self.client.create_tweet(text=message, media_ids=[media_id], in_reply_to_tweet_id=reply_id)
 
   def tweet_body(self, destination, token_id):
     print(destination, token_id)
@@ -42,7 +59,8 @@ class TwitterHandler:
     if not exists(file_path):
       goon.download_image()
     message = generate_message(destination, token_id)
-    first_tweet = self.api.update_status_with_media(filename = file_path, status = message)
+
+    first_tweet = self.client.create_tweet(message, )
     # return id for face method
     return first_tweet.id
 
@@ -63,22 +81,28 @@ class TwitterHandler:
     #generate unless overridden
     if message is None:
       message = generate_face_message()
-    tweet = self.api.update_status_with_media(filename = file_path, status = message, in_reply_to_status_id=reply_id)
+    self.tweet_image(message, file_path, reply_id)
+    #tweet = self.api.update_status_with_media(filename = file_path, status = message, in_reply_to_status_id=reply_id)
 
   # a function to check for mentions and handle them
   def check_mentions(self):
-    for tweet in tweepy.Cursor(self.api.mentions_timeline, since_id = self.since_mention).items():
+    #for tweet in tweepy.Cursor(self.client.get_users_mentions(id=self.id, since_id = self.since_mention)).items():
+    tweets = self.client.get_users_mentions(id=self.id, since_id = self.since_mention, expansions='author_id', max_results=10)
+    if type(tweets) is None:
+      return self.since_mention
+    for tweet in tweets.data:
       self.since_mention = max(tweet.id, self.since_mention)
-      if tweet.in_reply_to_status_id is not None:
-        continue
+      user_id = tweet.author_id
+      username = self.api.get_user(user_id=user_id).name
       txt = tweet.text.lower()
       response = re.search('^[^!]*!wonky\D*(\d+).*', txt)
       if response:
         try:
           token_id = int(response.group(1))
           message = generate_face_message()
-          message = '@%s %s' % (tweet.user.screen_name , message)
-          self.tweet_head('wonky', token_id, tweet.id_str, message)
+          message = '@%s %s' % (username , message)
+          print(message)
+          self.tweet_head('wonky', token_id, tweet.id, message)
         except Exception as e:
           #self.send_dm('gone rogue')
           print(e)
@@ -89,8 +113,8 @@ class TwitterHandler:
         try:
           token_id = int(response.group(1))
           message = 'poke! :)'
-          message = '@%s %s' % (tweet.user.screen_name , message)
-          self.tweet_head('poke', token_id, tweet.id_str, message)
+          message = '@%s %s' % (username , message)
+          self.tweet_head('poke', token_id, tweet.id, message)
         except Exception as e:
           print(e)
           traceback.print_exc()
@@ -100,8 +124,8 @@ class TwitterHandler:
         try:
           token_id = int(response.group(1))
           message = 'goon morning :)'
-          message = '@%s %s' % (tweet.user.screen_name , message)
-          self.tweet_head('gm', token_id, tweet.id_str, message)
+          message = '@%s %s' % (username , message)
+          self.tweet_head('gm', token_id, tweet.id, message)
         except Exception as e:
           print(e)
           traceback.print_exc()
@@ -113,8 +137,8 @@ class TwitterHandler:
           token_id = int(response.group(1))
           print(token_id)
           message = 'toke?!?'
-          message = '@%s %s' % (tweet.user.screen_name , message)
-          self.tweet_head('toke', token_id, tweet.id_str, message)
+          message = '@%s %s' % (username , message)
+          self.tweet_head('toke', token_id, tweet.id, message)
         except Exception as e:
           print(e)
           traceback.print_exc()
@@ -125,8 +149,8 @@ class TwitterHandler:
           token_id = int(response.group(1))
           print(token_id)
           message = 'protect yourself at all times :)'
-          message = '@%s %s' % (tweet.user.screen_name , message)
-          self.tweet_head('octagoonz', token_id, tweet.id_str, message)
+          message = '@%s %s' % (username , message)
+          self.tweet_head('octagoonz', token_id, tweet.id, message)
         except Exception as e:
           print(e)
           traceback.print_exc()
@@ -137,8 +161,8 @@ class TwitterHandler:
           token_id = int(response.group(1))
           print(token_id)
           message = 'there we go, we like that. well done!'
-          message = '@%s %s' % (tweet.user.screen_name , message)
-          self.tweet_head('cageside', token_id, tweet.id_str, message)
+          message = '@%s %s' % (username , message)
+          self.tweet_head('cageside', token_id, tweet.id, message)
         except Exception as e:
           print(e)
           traceback.print_exc()
@@ -149,8 +173,8 @@ class TwitterHandler:
           token_id = int(response.group(1))
           print(token_id)
           message = 'mo money mo problems'
-          message = '@%s %s' % (tweet.user.screen_name , message)
-          self.tweet_head('bucks', token_id, tweet.id_str, message)
+          message = '@%s %s' % (username , message)
+          self.tweet_head('bucks', token_id, tweet.id, message)
         except Exception as e:
           print(e)
           traceback.print_exc()
@@ -161,8 +185,8 @@ class TwitterHandler:
           token_id = int(response.group(1))
           print(token_id)
           message = 'lets go champ!'
-          message = '@%s %s' % (tweet.user.screen_name , message)
-          self.tweet_head('champ', token_id, tweet.id_str, message)
+          message = '@%s %s' % (username , message)
+          self.tweet_head('champ', token_id, tweet.id, message)
         except Exception as e:
           print(e)
           traceback.print_exc()
@@ -173,11 +197,11 @@ class TwitterHandler:
           token_id = int(response.group(1))
           print(token_id)
           message = 'lets get this bread'
-          message = '@%s %s' % (tweet.user.screen_name , message)
+          message = '@%s %s' % (username , message)
           if random.random() > .9:
-            self.tweet_head('dive', token_id, tweet.id_str, message)
+            self.tweet_head('dive', token_id, tweet.id, message)
           else:
-            self.tweet_head('bred', token_id, tweet.id_str, message)
+            self.tweet_head('bred', token_id, tweet.id, message)
         except Exception as e:
           print(e)
           traceback.print_exc()
@@ -188,11 +212,11 @@ class TwitterHandler:
           token_id = int(response.group(1))
           print(token_id)
           message = 'more wild than wu-tang'
-          message = '@%s %s' % (tweet.user.screen_name , message)
+          message = '@%s %s' % (username , message)
           if random.random() < .9:
-            self.tweet_head('gang', token_id, tweet.id_str, message)
+            self.tweet_head('gang', token_id, tweet.id, message)
           else:
-            self.tweet_head('gangtats', token_id, tweet.id_str, message)
+            self.tweet_head('gangtats', token_id, tweet.id, message)
         except Exception as e:
           print(e)
           traceback.print_exc()
@@ -204,12 +228,12 @@ class TwitterHandler:
           print(token_id)
           if random.random() > .1778:
             message = 'america, fuck yeah!'
-            message = '@%s %s' % (tweet.user.screen_name , message)
-            self.tweet_head('america', token_id, tweet.id_str, message)
+            message = '@%s %s' % (username , message)
+            self.tweet_head('america', token_id, tweet.id, message)
           else:
             message = 'GOD SAVE THE KING'
-            message = '@%s %s' % (tweet.user.screen_name , message)
-            self.tweet_head('uk', token_id, tweet.id_str, message)
+            message = '@%s %s' % (username , message)
+            self.tweet_head('uk', token_id, tweet.id, message)
         except Exception as e:
           print(e)
           traceback.print_exc()
@@ -218,5 +242,5 @@ class TwitterHandler:
 
   def send_dm(self, message):
     recipient_id = self.whami_id
-    direct_message = self.api.send_direct_message(recipient_id, message)
+    direct_message = self.client.create_direct_message(participant_id=recipient_id, text=message)
 

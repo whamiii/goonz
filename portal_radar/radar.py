@@ -18,7 +18,6 @@ class Radar:
   def __init__(self):
     self.twitter = TwitterHandler()
     self.contract = ContractHandler()
-    self.sales = SalesHandler()
 
   # a function to check for mentions and handle them
   def scan(self):
@@ -40,11 +39,10 @@ if __name__ == '__main__':
   radar = Radar()
   while True:
     try:
-      radar.scan()
+      #radar.scan()
       since_id= radar.twitter.check_mentions()
 
       print('checking... beep.... %s' % str(since_id)[-3:])
-      time.sleep(20)
     except KeyboardInterrupt:
       cache = 'echo %s > since_cache' % since_id
       os.system(cache)
@@ -52,7 +50,10 @@ if __name__ == '__main__':
       sys.exit()
     except Exception as e:
       logger.error(e)
+    finally:
+      time.sleep(69)
 else:
   logger.info('radar is being imported for testing')
   radar = Radar()
   radar.twitter.send_dm('test')
+  #radar.twitter.check_mentions()

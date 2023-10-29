@@ -1,5 +1,6 @@
 images
 old
 __pycache__
-portal_radar/goonauth.py
+portal_radar/goonauth.sh
+portal_radar/log
 
